@@ -156,8 +156,6 @@ class PolymodHandler
         // Parsing rules for various data formats.
         parseRules: buildParseRules(),
 
-        skipDependencyErrors: true,
-
         // Parse hxc files and register the scripted classes in them.
         useScriptedClasses: true,
         loadScriptsAsync: #if html5 true #else false #end,
