@@ -433,9 +433,9 @@ class TitleState extends MusicBeatState
               deleteCoolText();
               if (ngSpr != null) ngSpr.visible = false;
             case 9:
-              createCoolText([curWacky[0]]);
+              createCoolText(['Unreal', 'Fucking']);
             case 11:
-              addMoreText(curWacky[1]);
+              addMoreText('SUCKS');
             case 12:
               deleteCoolText();
             case 13:
