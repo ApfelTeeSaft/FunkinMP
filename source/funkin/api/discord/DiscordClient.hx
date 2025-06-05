@@ -56,7 +56,8 @@ class DiscordClient
   {
     while (true)
     {
-      trace('[DISCORD] Performing client update...');
+      // SYBAU WITH THAT SHIT UGH
+      // trace('[DISCORD] Performing client update...');
 
       #if DISCORD_DISABLE_IO_THREAD
       Discord.updateConnection();

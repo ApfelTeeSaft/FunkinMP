@@ -56,6 +56,7 @@ class MultiplayerMenuState extends MusicBeatState
   var bg:FlxSprite;
   var titleText:FlxText;
   var statusText:FlxText;
+  var connectionTimeout:flixel.util.FlxTimer;
 
   var currentSelection:Int = 0;
   var isConnecting:Bool = false;
@@ -193,14 +194,22 @@ class MultiplayerMenuState extends MusicBeatState
   {
     if (isConnecting) return;
 
-    // hardcoded to local for debugging
-    // TODO: add textbox for entering remote ip / or use matchmaker to resolve "match codes"
     isConnecting = true;
     updateStatusText("Connecting to host...");
 
     if (NetworkManager.instance.joinGame("127.0.0.1"))
     {
       FunkinSound.playOnce(Paths.sound('confirmMenu'));
+
+      connectionTimeout = new flixel.util.FlxTimer();
+      connectionTimeout.start(10.0, function(_) {
+        if (isConnecting && !NetworkManager.instance.isConnected)
+        {
+          updateStatusText("Connection timeout");
+          NetworkManager.instance.disconnect();
+          isConnecting = false;
+        }
+      });
     }
     else
     {
@@ -223,6 +232,12 @@ class MultiplayerMenuState extends MusicBeatState
 
   function onConnectionEstablished():Void
   {
+    if (connectionTimeout != null)
+    {
+      connectionTimeout.cancel();
+      connectionTimeout = null;
+    }
+
     updateStatusText("Connected! Entering lobby...");
 
     new flixel.util.FlxTimer().start(1.0, function(_) {
@@ -232,6 +247,12 @@ class MultiplayerMenuState extends MusicBeatState
 
   function onConnectionLost():Void
   {
+    if (connectionTimeout != null)
+    {
+      connectionTimeout.cancel();
+      connectionTimeout = null;
+    }
+
     updateStatusText("Connection lost");
     isConnecting = false;
   }

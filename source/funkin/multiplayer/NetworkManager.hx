@@ -25,6 +25,8 @@ class NetworkManager
   public var localPlayerId(default, null):String = "";
   public var remotePlayerId(default, null):String = "";
 
+  var connectionAttemptTime:Float = 0.0;
+
   // Timing synchronization
   public var networkTime(default, null):Float = 0.0;
   public var clockOffset(default, null):Float = 0.0;
@@ -60,7 +62,37 @@ class NetworkManager
       serverSocket.listen(1);
       isHost = true;
 
-      trace('[NETWORK] Hosting game on port $port');
+      trace('[NETWORK] Hosting game on port $port, waiting for connections...');
+
+      sys.thread.Thread.create(function() {
+        try
+        {
+          trace('[NETWORK] [THREAD] Waiting for client connection...');
+          var client = serverSocket.accept();
+
+          if (client != null)
+          {
+            trace('[NETWORK] [THREAD] Client connected!');
+            socket = client;
+            isConnected = true;
+
+            haxe.MainLoop.add(function() {
+              trace('[NETWORK] Connection established - entering lobby');
+              onConnected.dispatch();
+              return false;
+            });
+          }
+        }
+        catch (e:Dynamic)
+        {
+          trace('[NETWORK] [THREAD] Accept failed: $e');
+          haxe.MainLoop.add(function() {
+            onDisconnected.dispatch();
+            return false;
+          });
+        }
+      });
+
       return true;
     }
     catch (e:Dynamic)
@@ -79,19 +111,43 @@ class NetworkManager
     #if cpp
     try
     {
-      socket = new sys.net.Socket();
-      socket.connect(new sys.net.Host(host), port);
-      isHost = false;
-      isConnected = true;
+      trace('[NETWORK] Starting connection to $host:$port...');
 
-      sendHandshake();
-      trace('[NETWORK] Connected to $host:$port');
-      onConnected.dispatch();
+      sys.thread.Thread.create(function() {
+        try
+        {
+          trace('[NETWORK] [THREAD] Connecting to $host:$port...');
+          var newSocket = new sys.net.Socket();
+          newSocket.connect(new sys.net.Host(host), port);
+
+          socket = newSocket;
+          isHost = false;
+          isConnected = true;
+
+          trace('[NETWORK] [THREAD] Connected successfully!');
+
+          haxe.MainLoop.add(function() {
+            trace('[NETWORK] Connection established - sending handshake');
+            sendHandshake();
+            onConnected.dispatch();
+            return false;
+          });
+        }
+        catch (e:Dynamic)
+        {
+          trace('[NETWORK] [THREAD] Connection failed: $e');
+          haxe.MainLoop.add(function() {
+            onDisconnected.dispatch();
+            return false;
+          });
+        }
+      });
+
       return true;
     }
     catch (e:Dynamic)
     {
-      trace('[NETWORK] Failed to connect: $e');
+      trace('[NETWORK] Failed to start connection thread: $e');
       return false;
     }
     #else
@@ -116,33 +172,27 @@ class NetworkManager
   #if cpp
   function updateSocket():Void
   {
-    if (isHost && serverSocket != null)
+    if (socket != null && isConnected)
     {
       try
       {
-        var client = serverSocket.accept();
-        if (client != null)
-        {
-          socket = client;
-          isConnected = true;
-          onConnected.dispatch();
-          trace('[NETWORK] Client connected');
-        }
-      }
-      catch (e:Dynamic) {}
-    }
-
-    if (socket != null)
-    {
-      try
-      {
+        socket.setTimeout(0.001);
         var data = socket.input.readAll();
+
         if (data.length > 0)
         {
           parseIncomingData(data);
         }
       }
-      catch (e:Dynamic) {}
+      catch (e:Dynamic)
+      {
+        var errorStr = Std.string(e);
+        if (errorStr.indexOf("Timeout") == -1)
+        {
+          trace('[NETWORK] Read error: $e');
+          disconnect();
+        }
+      }
     }
   }
 
@@ -171,25 +221,22 @@ class NetworkManager
 
   public function sendMessage(message:NetworkMessage):Void
   {
-    if (!isConnected) return;
+    if (!isConnected || socket == null) return;
 
     message.senderId = localPlayerId;
     message.timestamp = getNetworkTime();
 
     #if cpp
-    if (socket != null)
+    try
     {
-      try
-      {
-        var data = Json.stringify(message) + "\n";
-        socket.output.writeString(data);
-        socket.output.flush();
-      }
-      catch (e:Dynamic)
-      {
-        trace('[NETWORK] Failed to send message: $e');
-        disconnect();
-      }
+      var data = Json.stringify(message) + "\n";
+      socket.output.writeString(data);
+      socket.output.flush();
+    }
+    catch (e:Dynamic)
+    {
+      trace('[NETWORK] Failed to send message: $e');
+      disconnect();
     }
     #end
   }
